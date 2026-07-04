@@ -24,13 +24,13 @@ $fixDll = 'wtsapi32.dll'
 
 function Fail($msg) {
     Write-Host " X $msg" -ForegroundColor Red
-    Write-Host "`n Drücke eine Taste zum Beenden..." -ForegroundColor DarkGray
+    Write-Host "`n DrÃ¼cke eine Taste zum Beenden..." -ForegroundColor DarkGray
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit 1
 }
 
 function CloseSteam {
-    Write-Host " Schließe Steam-Prozesse..." -ForegroundColor Yellow -NoNewline
+    Write-Host " SchlieÃŸe Steam-Prozesse..." -ForegroundColor Yellow -NoNewline
     Get-Process -Name 'steam','steamwebhelper','steamservice','steamupdate' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue
     Start-Sleep 3
     Write-Host " $ok" -ForegroundColor Green
@@ -94,7 +94,7 @@ if ($needsUpdate) {
 # Steam Performance Optimierungen
 CloseSteam
 
-# Kleiner Steam-Cache Cleanup für bessere Download-Performance
+# Kleiner Steam-Cache Cleanup fÃ¼r bessere Download-Performance
 $cacheFolder = Join-Path $steamPath 'appcache'
 if (Test-Path $cacheFolder) {
     Remove-Item (Join-Path $cacheFolder 'httpcache') -Recurse -Force -EA SilentlyContinue
@@ -113,5 +113,5 @@ if ($needsUpdate) {
 }
 
 Write-Host "`n Tipp: Warte 10-20 Sekunden nach dem Start, bevor du Downloads startest." -ForegroundColor Yellow
-Write-Host "`n Drücke eine Taste zum Beenden..." -ForegroundColor DarkGray
+Write-Host "`n DrÃ¼cke eine Taste zum Beenden..." -ForegroundColor DarkGray
 $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
