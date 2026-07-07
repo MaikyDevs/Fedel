@@ -3,21 +3,23 @@
 cls
 
 Write-Host ''
-Write-Host '  ===========================================' -ForegroundColor Cyan
-Write-Host '   _____ _____ ____  _____    _     _       ' -ForegroundColor Cyan
-Write-Host '  |   __|   __|    \|   __|  | |   | |      ' -ForegroundColor Cyan
-Write-Host '  |   __|   __|  |  |   __|  | |__ | |__    ' -ForegroundColor Cyan
-Write-Host '  |__|  |____|____/|_____|  |____||____|   ' -ForegroundColor Cyan
-Write-Host '  ===========================================' -ForegroundColor Cyan
-Write-Host '   Reverts the Steamproof manifest fix       ' -ForegroundColor Gray
-Write-Host '   Removes sideloaded wtsapi32.dll + traces  ' -ForegroundColor DarkGray
-Write-Host '  ===========================================' -ForegroundColor Cyan
+Write-Host '  ==================================================' -ForegroundColor Cyan
+Write-Host '   ______           _                               ' -ForegroundColor Cyan
+Write-Host '  |  ____|         | |                              ' -ForegroundColor Cyan
+Write-Host '  | |__   _ __   __| | _____      ____ _ _ __ ___   ' -ForegroundColor Cyan
+Write-Host '  |  __| | |_ \ / _` |/ _ \ \ /\ / / _` | |_ ` _ \  ' -ForegroundColor Cyan
+Write-Host '  | |____| | | | (_| | (_) \ V  V / (_| | | | | | | ' -ForegroundColor Cyan
+Write-Host '  |______|_| |_|\__,_|\___/ \_/\_/ \__,_|_| |_| |_| ' -ForegroundColor Cyan
+Write-Host '  ==================================================' -ForegroundColor Cyan
+Write-Host '   Steam GreenLuma cleanup script                    ' -ForegroundColor Gray
+Write-Host '   Deletes stplug-in contents + depotcache contents  ' -ForegroundColor DarkGray
+Write-Host '  ==================================================' -ForegroundColor Cyan
 Write-Host ''
 
 $ok = [char]0x2713
 
 function Fail($msg) {
-    Write-Host "  X $msg" -ForegroundColor Red
+    Write-Host "  [X] $msg" -ForegroundColor Red
     Write-Host ''; Write-Host '  Press any key to exit...' -ForegroundColor DarkGray
     try { $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') } catch { Start-Sleep 10 }
     exit
@@ -37,65 +39,71 @@ function CloseSteam($steamPath) {
     Write-Host "  $ok Closed Steam" -ForegroundColor Green
 }
 
+# Locate Steam install from registry
 $steamPath = $null
 foreach ($reg in @('HKCU:\Software\Valve\Steam','HKLM:\Software\Valve\Steam','HKLM:\Software\WOW6432Node\Valve\Steam')) {
     $p = (Get-ItemProperty -Path $reg -EA SilentlyContinue).SteamPath
     if ($p -and (Test-Path ($p -replace '/','\'))){ $steamPath = $p -replace '/','\'; break }
 }
-if (-not $steamPath) { Fail 'Steam not found' }
+if (-not $steamPath) { Fail 'Steam not found on this system.' }
 Write-Host "  $ok Found Steam: $steamPath" -ForegroundColor Green
 
+# Target directories
 $targets = @(
-    @{ Name = 'wtsapi32.dll (sideloaded payload)'; Path = (Join-Path $steamPath 'wtsapi32.dll') },
-    @{ Name = 'version.dll (legacy sideload)';     Path = (Join-Path $steamPath 'version.dll') },
-    @{ Name = 'config\manifests.dll';              Path = (Join-Path $steamPath 'config\manifests.dll') },
-    @{ Name = 'config\.mfx_init (init marker)';    Path = (Join-Path $steamPath 'config\.mfx_init') },
-    @{ Name = 'config\.stfix_init (init marker)';  Path = (Join-Path $steamPath 'config\.stfix_init') }
+    @{ Name = 'config\stplug-in (DLL + lua drop folder)'; Path = (Join-Path $steamPath 'config\stplug-in') },
+    @{ Name = 'depotcache (manifest cache)';              Path = (Join-Path $steamPath 'depotcache') }
 )
-
-$foundAny = $false
-foreach ($t in $targets) { if (Test-Path $t.Path) { $foundAny = $true; break } }
-
-if (-not $foundAny) {
-    Write-Host ''
-    Write-Host "  $ok No Steamproof traces found. Steam is clean." -ForegroundColor Green
-    Write-Host ''; Write-Host '  Press any key to exit...' -ForegroundColor DarkGray
-    try { $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') } catch { Start-Sleep 10 }
-    exit
-}
 
 Write-Host ''
 Write-Host '  Closing Steam before cleanup...' -ForegroundColor Yellow
 CloseSteam $steamPath
 
 Write-Host ''
-Write-Host '  Removing Steamproof footprint:' -ForegroundColor White
-$removed = 0
-$skipped = 0
+Write-Host '  Cleaning directories:' -ForegroundColor White
+$totalRemoved = 0
+$hadErrors = $false
+
 foreach ($t in $targets) {
-    if (Test-Path $t.Path) {
+    Write-Host ''
+    Write-Host "  -> $($t.Name)" -ForegroundColor Cyan
+    Write-Host "     $($t.Path)" -ForegroundColor DarkGray
+
+    if (-not (Test-Path -LiteralPath $t.Path)) {
+        Write-Host "     - absent (nothing to clean)" -ForegroundColor DarkGray
+        continue
+    }
+
+    $items = Get-ChildItem -LiteralPath $t.Path -Force -EA SilentlyContinue
+    if (-not $items -or $items.Count -eq 0) {
+        Write-Host "     - empty (nothing to clean)" -ForegroundColor DarkGray
+        continue
+    }
+
+    $removed = 0
+    $failed  = 0
+    foreach ($item in $items) {
         try {
-            Remove-Item $t.Path -Force -EA Stop
-            Write-Host "    $ok removed  $($t.Name)" -ForegroundColor Green
+            Remove-Item -LiteralPath $item.FullName -Recurse -Force -EA Stop
             $removed++
         } catch {
-            Write-Host "    ! failed   $($t.Name) - $($_.Exception.Message)" -ForegroundColor Red
-            $skipped++
+            $failed++
+            $hadErrors = $true
+            Write-Host "     ! failed: $($item.Name) - $($_.Exception.Message)" -ForegroundColor Red
         }
-    } else {
-        Write-Host "    - absent   $($t.Name)" -ForegroundColor DarkGray
     }
+    Write-Host "     $ok removed $removed item(s)" -ForegroundColor Green
+    $totalRemoved += $removed
 }
 
 Write-Host ''
-if ($skipped -gt 0) {
-    Write-Host "  ! Done. Removed $removed, $skipped could not be removed." -ForegroundColor Yellow
+if ($hadErrors) {
+    Write-Host "  ! Done. Removed $totalRemoved item(s), some items could not be removed." -ForegroundColor Yellow
 } else {
-    Write-Host "  $ok Done. Removed $removed file(s). Steamproof has been reverted." -BackgroundColor Green -ForegroundColor Black
+    Write-Host "  $ok Done. Removed $totalRemoved item(s)." -BackgroundColor Green -ForegroundColor Black
 }
 
 Start-Process (Join-Path $steamPath 'steam.exe')
-Write-Host "  $ok Started Steam (clean)" -ForegroundColor Green
+Write-Host "  $ok Started Steam" -ForegroundColor Green
 
 Write-Host ''
 Write-Host '  Press any key to exit...' -ForegroundColor DarkGray
